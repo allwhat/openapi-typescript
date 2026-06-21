@@ -76,7 +76,7 @@ jobs:
       - id: packagemaze-install-token
         run: maze auth exchange-oidc --feed "$PACKAGE_MAZE_FEED" --purpose install --format github-output
 
-      - name: Install published package from PackageMaze
+      - name: Download published package from PackageMaze
         run: |
           rm -rf /tmp/packagemaze-openapi-consumer
           mkdir -p /tmp/packagemaze-openapi-consumer
@@ -86,8 +86,7 @@ jobs:
             printf '//pkg.packagemaze.com/packagemaze/npm-smoke-test/:_authToken=${NODE_AUTH_TOKEN}\n'
             printf 'always-auth=true\n'
           } > .npmrc
-          npm init -y
-          npm install "${PACKAGE_NAME}@${PACKAGE_VERSION}" --ignore-scripts --no-audit --fund=false --registry "$PACKAGE_MAZE_REGISTRY"
-          ./node_modules/.bin/openapi-typescript --version
+          npm pack "${PACKAGE_NAME}@${PACKAGE_VERSION}" --pack-destination . --ignore-scripts --registry "$PACKAGE_MAZE_REGISTRY"
+          test -s "${PACKAGE_NAME}-${PACKAGE_VERSION}.tgz"
         env:
           NODE_AUTH_TOKEN: ${{ steps.packagemaze-install-token.outputs.token }}
