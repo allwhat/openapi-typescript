@@ -1,0 +1,102 @@
+name: PackageMaze npm smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/packagemaze-ci-smoke
+
+permissions:
+  attestations: write
+  contents: read
+  id-token: write
+
+jobs:
+  install-and-publish:
+    runs-on: ubuntu-latest
+    env:
+      PACKAGE_MAZE_FEED: packagemaze/npm-smoke-test
+      PACKAGE_MAZE_REGISTRY: https://pkg.packagemaze.com/packagemaze/npm-smoke-test/
+      PACKAGE_NAME: openapi-typescript
+      PACKAGE_VERSION: 7.13.0-packagemaze.${{ github.run_id }}.${{ github.run_attempt }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: packagemaze/setup-maze@v0.0.1
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - uses: pnpm/action-setup@v5
+        with:
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set smoke package version
+        run: |
+          node - <<'JS'
+          import fs from "node:fs";
+
+          const path = "packages/openapi-typescript/package.json";
+          const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
+          pkg.version = process.env.PACKAGE_VERSION;
+          fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
+          JS
+
+      - name: Build package
+        run: pnpm --filter openapi-typescript build
+
+      - name: Pack package
+        run: |
+          mkdir -p packagemaze-dist
+          pnpm --dir packages/openapi-typescript pack --pack-destination ../../packagemaze-dist
+
+      - uses: actions/attest-build-provenance@v4.1.0
+        with:
+          subject-path: packagemaze-dist/*.tgz
+
+      - name: Verify package attestation
+        run: |
+          for attempt in 1 2 3 4 5; do
+            gh attestation verify packagemaze-dist/*.tgz --repo "$GITHUB_REPOSITORY" && exit 0
+            sleep 5
+          done
+          exit 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - id: packagemaze-publish-token
+        run: maze auth exchange-oidc --feed "$PACKAGE_MAZE_FEED" --purpose publish --package "$PACKAGE_NAME" --format github-output
+
+      - name: Publish package to PackageMaze
+        run: |
+          {
+            printf 'registry=%s\n' "$PACKAGE_MAZE_REGISTRY"
+            printf '//pkg.packagemaze.com/packagemaze/npm-smoke-test/:_authToken=${MAZE_TOKEN}\n'
+          } > ~/.npmrc
+          npm publish ./packagemaze-dist/*.tgz --registry "$PACKAGE_MAZE_REGISTRY" --access public --tag packagemaze-smoke
+        env:
+          MAZE_TOKEN: ${{ steps.packagemaze-publish-token.outputs.token }}
+
+      - id: packagemaze-install-token
+        run: maze auth exchange-oidc --feed "$PACKAGE_MAZE_FEED" --purpose install --format github-output
+
+      - name: Read back published package from PackageMaze
+        run: |
+          rm -rf /tmp/packagemaze-openapi-consumer
+          mkdir -p /tmp/packagemaze-openapi-consumer
+          cd /tmp/packagemaze-openapi-consumer
+          {
+            printf 'registry=%s\n' "$PACKAGE_MAZE_REGISTRY"
+            printf '//pkg.packagemaze.com/packagemaze/npm-smoke-test/:_authToken=${MAZE_TOKEN}\n'
+          } > .npmrc
+          npm pack "${PACKAGE_NAME}@${PACKAGE_VERSION}" --pack-destination . --ignore-scripts --registry "$PACKAGE_MAZE_REGISTRY"
+          test -s "${PACKAGE_NAME}-${PACKAGE_VERSION}.tgz"
+          tar -xzf "${PACKAGE_NAME}-${PACKAGE_VERSION}.tgz" package/package.json
+          node -e 'const pkg = require("./package/package.json"); if (pkg.version !== process.env.PACKAGE_VERSION) process.exit(1);'
+        env:
+          MAZE_TOKEN: ${{ steps.packagemaze-install-token.outputs.token }}
