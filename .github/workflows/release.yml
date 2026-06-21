@@ -6,7 +6,6 @@ on:
       - main
 
 permissions:
-  id-token: write # Required for OIDC
   contents: read
 
 jobs:
@@ -28,4 +27,4 @@ jobs:
           run_install: true
 
       - name: Publish packages
-        run: pnpm exec changeset publish
+        run: echo "npmjs publishing is disabled in this PackageMaze smoke repo."
