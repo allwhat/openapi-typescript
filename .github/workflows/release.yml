@@ -7,8 +7,7 @@ on:
 
 permissions:
   id-token: write # Required for OIDC
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   changelog:
@@ -28,12 +27,5 @@ jobs:
         with:
           run_install: true
 
-      - name: Changesets version and/or publish
-        uses: changesets/action@v1
-        with:
-          version: pnpm exec changeset version && pnpm install --lockfile-only
-          publish: pnpm exec changeset publish
-          commit: "[ci] release"
-          title: "[ci] release"
-        env:
-          GITHUB_TOKEN: ${{ secrets.OPENAPI_TS_BOT_GITHUB_TOKEN }}
+      - name: Publish packages
+        run: pnpm exec changeset publish
