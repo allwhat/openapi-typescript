@@ -6,9 +6,14 @@ on:
       - main
 
 permissions:
-  id-token: write # Required for OIDC
+  id-token: write
+  attestations: write
   contents: write
   pull-requests: write
+
+env:
+  PACKAGE_MAZE_FEED: packagemaze/npm-smoke-test
+  PACKAGE_MAZE_REGISTRY_URL: https://pkg.packagemaze.com/packagemaze/npm-smoke-test
 
 jobs:
   changelog:
@@ -32,6 +37,7 @@ jobs:
         run: pnpm run build
 
       - name: Changesets version and/or publish
+        id: changesets
         uses: changesets/action@v1
         with:
           version: pnpm run version
@@ -40,3 +46,57 @@ jobs:
           title: "[ci] release"
         env:
           GITHUB_TOKEN: ${{ secrets.OPENAPI_TS_BOT_GITHUB_TOKEN }}
+
+      - name: Check PackageMaze package release
+        if: steps.changesets.outputs.published == 'true'
+        id: packagemaze-release
+        env:
+          PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.publishedPackages }}
+        run: |
+          node <<'NODE'
+          const packages = JSON.parse(process.env.PUBLISHED_PACKAGES || "[]");
+          const publish = packages.some((pkg) => pkg.name === "openapi-typescript");
+          require("node:fs").appendFileSync(process.env.GITHUB_OUTPUT, `publish=${publish}\n`);
+          NODE
+
+      - name: Set up PackageMaze CLI
+        if: steps.packagemaze-release.outputs.publish == 'true'
+        uses: packagemaze/setup-maze@v0.0.1
+
+      - name: Pack openapi-typescript for PackageMaze
+        if: steps.packagemaze-release.outputs.publish == 'true'
+        id: packagemaze-pack
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/packagemaze-npm"
+          package_version="$(node -p 'require("./packages/openapi-typescript/package.json").version')"
+          tarball="$RUNNER_TEMP/packagemaze-npm/openapi-typescript-${package_version}.tgz"
+          (
+            cd packages/openapi-typescript
+            corepack pnpm pack --out "$tarball"
+          )
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
+      - name: Attest PackageMaze package
+        if: steps.packagemaze-release.outputs.publish == 'true'
+        uses: actions/attest-build-provenance@v4.1.0
+        with:
+          subject-path: ${{ steps.packagemaze-pack.outputs.tarball }}
+
+      - name: Configure PackageMaze npm registry
+        if: steps.packagemaze-release.outputs.publish == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: latest
+          registry-url: ${{ env.PACKAGE_MAZE_REGISTRY_URL }}/
+
+      - name: Set up my CI to publish to PackageMaze
+        if: steps.packagemaze-release.outputs.publish == 'true'
+        id: packagemaze-publish-token
+        run: maze auth exchange-oidc --feed "$PACKAGE_MAZE_FEED" --purpose publish --package openapi-typescript --format github-output
+
+      - name: Publish openapi-typescript to PackageMaze
+        if: steps.packagemaze-release.outputs.publish == 'true'
+        run: corepack pnpm publish "${{ steps.packagemaze-pack.outputs.tarball }}" --access public --no-git-checks --registry "$PACKAGE_MAZE_REGISTRY_URL/"
+        env:
+          NODE_AUTH_TOKEN: ${{ steps.packagemaze-publish-token.outputs.token }}
