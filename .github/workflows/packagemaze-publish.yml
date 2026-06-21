@@ -69,7 +69,7 @@ jobs:
             printf '//pkg.packagemaze.com/packagemaze/npm-smoke-test/:_authToken=${NODE_AUTH_TOKEN}\n'
             printf 'always-auth=true\n'
           } > ~/.npmrc
-          npm publish ./packagemaze-dist/*.tgz --registry "$PACKAGE_MAZE_REGISTRY" --access public
+          npm publish ./packagemaze-dist/*.tgz --registry "$PACKAGE_MAZE_REGISTRY" --access public --tag packagemaze-smoke
         env:
           NODE_AUTH_TOKEN: ${{ steps.packagemaze-publish-token.outputs.token }}
 
