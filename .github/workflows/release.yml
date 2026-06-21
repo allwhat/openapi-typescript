@@ -75,6 +75,7 @@ jobs:
             cd packages/openapi-typescript
             corepack pnpm pack --out "$tarball"
           )
+          echo "package-version=$package_version" >> "$GITHUB_OUTPUT"
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
 
       - name: Attest PackageMaze package
@@ -100,3 +101,26 @@ jobs:
         run: corepack pnpm publish "${{ steps.packagemaze-pack.outputs.tarball }}" --access public --no-git-checks --registry "$PACKAGE_MAZE_REGISTRY_URL/"
         env:
           NODE_AUTH_TOKEN: ${{ steps.packagemaze-publish-token.outputs.token }}
+
+      - name: Set up my CI to install from PackageMaze
+        if: steps.packagemaze-release.outputs.publish == 'true'
+        id: packagemaze-install-token
+        run: maze auth exchange-oidc --feed "$PACKAGE_MAZE_FEED" --purpose install --format github-output
+
+      - name: Install published openapi-typescript from PackageMaze
+        if: steps.packagemaze-release.outputs.publish == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ steps.packagemaze-install-token.outputs.token }}
+          PACKAGE_VERSION: ${{ steps.packagemaze-pack.outputs.package-version }}
+        run: |
+          rm -rf "$RUNNER_TEMP/packagemaze-readback"
+          mkdir -p "$RUNNER_TEMP/packagemaze-readback"
+          cd "$RUNNER_TEMP/packagemaze-readback"
+          {
+            printf 'registry=%s/\n' "$PACKAGE_MAZE_REGISTRY_URL"
+            printf '//pkg.packagemaze.com/packagemaze/npm-smoke-test/:_authToken=${NODE_AUTH_TOKEN}\n'
+            printf 'always-auth=true\n'
+          } > .npmrc
+          npm init -y
+          npm install "openapi-typescript@$PACKAGE_VERSION" --ignore-scripts --no-audit --fund=false
+          node --input-type=module -e 'const mod = await import("openapi-typescript"); if (typeof mod.default !== "function") throw new Error("PackageMaze readback import failed");'
