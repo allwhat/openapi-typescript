@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   changelog:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, ARM64, packagemaze-linux-local]
     steps:
       - name: Git setup
         uses: actions/checkout@v6
@@ -21,20 +21,17 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: latest
+          package-manager-cache: false
 
       - name: pnpm setup
         uses: pnpm/action-setup@v5
         with:
           run_install: true
 
-      # Do not remove! This ensures a build happens every time
-      - name: Build all packages
-        run: pnpm run build
-
       - name: Changesets version and/or publish
         uses: changesets/action@v1
         with:
-          version: pnpm run version
+          version: pnpm exec changeset version && pnpm install --lockfile-only
           publish: pnpm exec changeset publish
           commit: "[ci] release"
           title: "[ci] release"

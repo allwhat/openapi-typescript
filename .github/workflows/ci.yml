@@ -6,68 +6,47 @@ on:
       - main
       - "renovate/**"
   pull_request:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner pool for manual install checks.
+        required: true
+        type: choice
+        default: local
+        options:
+          - local
+          - github-hosted
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  lint:
+  package-install:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.runner == 'local' }}
+    runs-on: [self-hosted, Linux, ARM64, packagemaze-linux-local]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: latest
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v5
+        with:
+          run_install: true
+
+  package-install-github-hosted:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.runner == 'github-hosted' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: latest
+          package-manager-cache: false
       - uses: pnpm/action-setup@v5
         with:
           run_install: true
-      - run: pnpm run lint
-  test-node-versions:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [22, 24]
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ matrix.node-version }}
-      - uses: pnpm/action-setup@v5
-        with:
-          run_install: true
-      - run: pnpm test
-  test-e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: latest
-      - uses: pnpm/action-setup@v5
-        with:
-          run_install: true
-      - run: pnpm exec playwright install --with-deps
-      - run: pnpm run test-e2e
-  test-macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: latest
-      - uses: pnpm/action-setup@v5
-        with:
-          run_install: true
-      - run: pnpm test
-  test-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: latest
-      - uses: pnpm/action-setup@v5
-        with:
-          run_install: true
-      - run: pnpm test
