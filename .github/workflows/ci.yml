@@ -12,10 +12,10 @@ on:
         description: Runner pool for manual install checks.
         required: true
         type: choice
-        default: local
+        default: github-hosted
         options:
-          - local
           - github-hosted
+          - local
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -26,8 +26,8 @@ permissions:
 
 jobs:
   package-install:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.runner == 'local' }}
-    runs-on: [self-hosted, Linux, ARM64, packagemaze-linux-local]
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.runner == 'github-hosted' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -38,9 +38,9 @@ jobs:
         with:
           run_install: true
 
-  package-install-github-hosted:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.runner == 'github-hosted' }}
-    runs-on: ubuntu-latest
+  package-install-local:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.runner == 'local' }}
+    runs-on: [self-hosted, Linux, ARM64, packagemaze-linux-local]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
