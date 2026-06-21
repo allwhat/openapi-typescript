@@ -25,9 +25,6 @@ jobs:
 
       - uses: packagemaze/setup-maze@v0.0.1
 
-      - id: packagemaze-install-token
-        run: maze auth exchange-oidc --feed "$PACKAGE_MAZE_FEED" --purpose install --format github-output
-
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
@@ -36,18 +33,8 @@ jobs:
         with:
           run_install: false
 
-      - name: Configure PackageMaze npm install
-        run: |
-          {
-            printf 'registry=%s\n' "$PACKAGE_MAZE_REGISTRY"
-            printf '//pkg.packagemaze.com/packagemaze/npm-smoke-test/:_authToken=${NODE_AUTH_TOKEN}\n'
-            printf 'always-auth=true\n'
-          } > ~/.npmrc
-
-      - name: Install dependencies through PackageMaze
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
-        env:
-          NODE_AUTH_TOKEN: ${{ steps.packagemaze-install-token.outputs.token }}
 
       - name: Set smoke package version
         run: |
@@ -76,15 +63,29 @@ jobs:
         run: maze auth exchange-oidc --feed "$PACKAGE_MAZE_FEED" --purpose publish --package "$PACKAGE_NAME" --format github-output
 
       - name: Publish package to PackageMaze
-        run: npm publish packagemaze-dist/*.tgz --registry "$PACKAGE_MAZE_REGISTRY" --access public
+        run: |
+          {
+            printf 'registry=%s\n' "$PACKAGE_MAZE_REGISTRY"
+            printf '//pkg.packagemaze.com/packagemaze/npm-smoke-test/:_authToken=${NODE_AUTH_TOKEN}\n'
+            printf 'always-auth=true\n'
+          } > ~/.npmrc
+          npm publish packagemaze-dist/*.tgz --registry "$PACKAGE_MAZE_REGISTRY" --access public
         env:
           NODE_AUTH_TOKEN: ${{ steps.packagemaze-publish-token.outputs.token }}
+
+      - id: packagemaze-install-token
+        run: maze auth exchange-oidc --feed "$PACKAGE_MAZE_FEED" --purpose install --format github-output
 
       - name: Install published package from PackageMaze
         run: |
           rm -rf /tmp/packagemaze-openapi-consumer
           mkdir -p /tmp/packagemaze-openapi-consumer
           cd /tmp/packagemaze-openapi-consumer
+          {
+            printf 'registry=%s\n' "$PACKAGE_MAZE_REGISTRY"
+            printf '//pkg.packagemaze.com/packagemaze/npm-smoke-test/:_authToken=${NODE_AUTH_TOKEN}\n'
+            printf 'always-auth=true\n'
+          } > .npmrc
           npm init -y
           npm install "${PACKAGE_NAME}@${PACKAGE_VERSION}" --ignore-scripts --no-audit --fund=false --registry "$PACKAGE_MAZE_REGISTRY"
           ./node_modules/.bin/openapi-typescript --version
