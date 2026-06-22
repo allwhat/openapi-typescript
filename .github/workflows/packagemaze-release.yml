@@ -25,11 +25,26 @@ jobs:
           node-version: latest
           package-manager-cache: false
 
+      - name: Set up my CI to install from PackageMaze
+        id: packagemaze-install-token
+        uses: packagemaze/setup-maze@v0.0.2
+        with:
+          feed: ${{ env.PACKAGE_MAZE_FEED }}
+          purpose: install
+
+      - name: Configure PackageMaze npm registry for installs
+        shell: bash
+        run: |
+          {
+            printf 'registry=%s/\n' "$PACKAGE_MAZE_REGISTRY_URL"
+            printf '//pkg.packagemaze.com/packagemaze/npm-smoke-test/:_authToken=${NODE_AUTH_TOKEN}\n'
+          } > .npmrc
+
       - uses: pnpm/action-setup@v5
         with:
           run_install: true
-
-      - uses: packagemaze/setup-maze@v0.0.1
+        env:
+          NODE_AUTH_TOKEN: ${{ steps.packagemaze-install-token.outputs.token }}
 
       - name: Build package
         run: pnpm --filter openapi-typescript build
@@ -62,16 +77,16 @@ jobs:
 
       - name: Set up my CI to publish to PackageMaze
         id: packagemaze-publish-token
-        run: maze auth exchange-oidc --feed "$PACKAGE_MAZE_FEED" --purpose publish --package openapi-typescript --format github-output
+        uses: packagemaze/setup-maze@v0.0.2
+        with:
+          feed: ${{ env.PACKAGE_MAZE_FEED }}
+          purpose: publish
+          package: openapi-typescript
 
       - name: Publish openapi-typescript to PackageMaze
         run: corepack pnpm publish "${{ steps.pack.outputs.tarball }}" --access public --no-git-checks --registry "$PACKAGE_MAZE_REGISTRY_URL/"
         env:
           NODE_AUTH_TOKEN: ${{ steps.packagemaze-publish-token.outputs.token }}
-
-      - name: Set up my CI to install from PackageMaze
-        id: packagemaze-install-token
-        run: maze auth exchange-oidc --feed "$PACKAGE_MAZE_FEED" --purpose install --format github-output
 
       - name: Install published openapi-typescript from PackageMaze
         env:
