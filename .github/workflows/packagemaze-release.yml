@@ -37,6 +37,7 @@ jobs:
         run: |
           {
             printf 'registry=%s/\n' "$PACKAGE_MAZE_REGISTRY_URL"
+            printf 'replace-registry-host=always\n'
             printf '//pkg.packagemaze.com/packagemaze/npm-smoke-test/:_authToken=${NODE_AUTH_TOKEN}\n'
           } > .npmrc
 
@@ -93,13 +94,14 @@ jobs:
           NODE_AUTH_TOKEN: ${{ steps.packagemaze-install-token.outputs.token }}
           PACKAGE_VERSION: ${{ steps.pack.outputs.package-version }}
         run: |
-          rm -rf "$RUNNER_TEMP/packagemaze-readback"
+          rm -rf "$RUNNER_TEMP/packagemaze-readback" "$RUNNER_TEMP/packagemaze-readback-npm-cache"
           mkdir -p "$RUNNER_TEMP/packagemaze-readback"
           cd "$RUNNER_TEMP/packagemaze-readback"
           {
             printf 'registry=%s/\n' "$PACKAGE_MAZE_REGISTRY_URL"
+            printf 'replace-registry-host=always\n'
             printf '//pkg.packagemaze.com/packagemaze/npm-smoke-test/:_authToken=${NODE_AUTH_TOKEN}\n'
           } > .npmrc
           npm init -y
-          npm install "openapi-typescript@$PACKAGE_VERSION" --ignore-scripts --no-audit --fund=false
+          npm install "openapi-typescript@$PACKAGE_VERSION" --ignore-scripts --no-audit --fund=false --cache "$RUNNER_TEMP/packagemaze-readback-npm-cache" --prefer-online
           node --input-type=module -e 'const mod = await import("openapi-typescript"); if (typeof mod.default !== "function") throw new Error("PackageMaze readback import failed");'
