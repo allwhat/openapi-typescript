@@ -23,6 +23,7 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   package-install:
@@ -50,3 +51,115 @@ jobs:
       - uses: pnpm/action-setup@v5
         with:
           run_install: true
+
+  install-benchmark-packagemaze-cold:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.runner == 'github-hosted' }}
+    runs-on: ubuntu-latest
+    name: Benchmark npm install with PackageMaze (cold)
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: latest
+          package-manager-cache: false
+
+      - uses: pnpm/action-setup@v5
+        with:
+          run_install: false
+
+      - id: packagemaze-token
+        uses: packagemaze/setup-maze@v0.0.2
+        with:
+          feed: packagemaze/npm-smoke-test
+          purpose: install
+
+      - name: Configure PackageMaze npm registry
+        run: |
+          set -euo pipefail
+          {
+            printf '%s\n' 'registry=https://pkg.packagemaze.com/packagemaze/npm-smoke-test/'
+            printf '%s\n' 'replace-registry-host=always'
+            printf '%s\n' '//pkg.packagemaze.com/packagemaze/npm-smoke-test/:_authToken=${MAZE_TOKEN}'
+          } > .npmrc
+
+      - name: Install npm dependencies with PackageMaze
+        env:
+          MAZE_TOKEN: ${{ steps.packagemaze-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          start_ms="$(date +%s%3N)"
+          pnpm install --frozen-lockfile --store-dir "$RUNNER_TEMP/pnpm-store"
+          end_ms="$(date +%s%3N)"
+          elapsed_ms="$((end_ms - start_ms))"
+          printf 'BENCHMARK_RESULT repo=openapi-typescript protocol=npm scenario=packagemaze-cold milliseconds=%s seconds=%s.%03d\n' "$elapsed_ms" "$((elapsed_ms / 1000))" "$((elapsed_ms % 1000))"
+
+  install-benchmark-packagemaze-warm:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.runner == 'github-hosted' }}
+    needs: install-benchmark-packagemaze-cold
+    runs-on: ubuntu-latest
+    name: Benchmark npm install with PackageMaze (warm)
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: latest
+          package-manager-cache: false
+
+      - uses: pnpm/action-setup@v5
+        with:
+          run_install: false
+
+      - id: packagemaze-token
+        uses: packagemaze/setup-maze@v0.0.2
+        with:
+          feed: packagemaze/npm-smoke-test
+          purpose: install
+
+      - name: Configure PackageMaze npm registry
+        run: |
+          set -euo pipefail
+          {
+            printf '%s\n' 'registry=https://pkg.packagemaze.com/packagemaze/npm-smoke-test/'
+            printf '%s\n' 'replace-registry-host=always'
+            printf '%s\n' '//pkg.packagemaze.com/packagemaze/npm-smoke-test/:_authToken=${MAZE_TOKEN}'
+          } > .npmrc
+
+      - name: Install npm dependencies with PackageMaze
+        env:
+          MAZE_TOKEN: ${{ steps.packagemaze-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          start_ms="$(date +%s%3N)"
+          pnpm install --frozen-lockfile --store-dir "$RUNNER_TEMP/pnpm-store"
+          end_ms="$(date +%s%3N)"
+          elapsed_ms="$((end_ms - start_ms))"
+          printf 'BENCHMARK_RESULT repo=openapi-typescript protocol=npm scenario=packagemaze-warm milliseconds=%s seconds=%s.%03d\n' "$elapsed_ms" "$((elapsed_ms / 1000))" "$((elapsed_ms % 1000))"
+
+  install-benchmark-upstream:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.runner == 'github-hosted' }}
+    runs-on: ubuntu-latest
+    name: Benchmark npm install from upstream
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: latest
+          package-manager-cache: false
+
+      - uses: pnpm/action-setup@v5
+        with:
+          run_install: false
+
+      - name: Install npm dependencies from upstream
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+        run: |
+          set -euo pipefail
+          start_ms="$(date +%s%3N)"
+          pnpm install --frozen-lockfile --store-dir "$RUNNER_TEMP/pnpm-store" --registry=https://registry.npmjs.org/
+          end_ms="$(date +%s%3N)"
+          elapsed_ms="$((end_ms - start_ms))"
+          printf 'BENCHMARK_RESULT repo=openapi-typescript protocol=npm scenario=upstream milliseconds=%s seconds=%s.%03d\n' "$elapsed_ms" "$((elapsed_ms / 1000))" "$((elapsed_ms % 1000))"
